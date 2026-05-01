@@ -1,7 +1,9 @@
 // Leader-side XDP quorum filter for Raft AppendResponse packets.
 //
 // Runs on node1. It tracks which follower node_ids have ACKed each log index.
-// ACK packets are dropped until the remote majority is reached. The ACK that
+// ACK packets are dropped until the remote quorum is reached. In this three-node
+// lab the leader already counts as one replicated node, so one follower ACK is
+// enough to reach the Raft majority of two. The ACK that
 // reaches quorum is marked with FLAG_QUORUM_REACHED and passed to userspace,
 // which lets the leader wake only once the quorum condition is true.
 
@@ -16,7 +18,7 @@
 #define MSG_APPEND_RESPONSE 0x21
 #define FLAG_SUCCESS 0x0001
 #define FLAG_QUORUM_REACHED 0x0002
-#define QUORUM_REMOTE_ACKS 2
+#define QUORUM_REMOTE_ACKS 1
 #define QUORUM_SLOTS 4096
 
 struct quorum_slot {

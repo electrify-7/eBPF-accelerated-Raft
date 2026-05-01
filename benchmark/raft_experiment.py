@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Experiment API for the four-node Raft/eBPF lab.
+"""Experiment API for the three-node Raft/eBPF lab.
 
 Importable API:
     run_without_ebpf()
@@ -35,7 +35,7 @@ class ExperimentConfig:
     follower_seed_terms: str = os.environ.get("FOLLOWER_SEED_TERMS", "1,1,1,4,4")
     lagged_seed_terms: str = os.environ.get("LAGGED_FOLLOWER_SEED_TERMS", "1,1,1,3,3")
     enable_leader_quorum: bool = os.environ.get("ENABLE_LEADER_QUORUM", "1") != "0"
-    enable_tc_broadcast: bool = os.environ.get("ENABLE_TC_BROADCAST", "0") == "1"
+    enable_tc_broadcast: bool = os.environ.get("ENABLE_TC_BROADCAST", "1") != "0"
 
 
 def sh(cmd: List[str], *, cwd: Path = ROOT, check: bool = True, capture: bool = True) -> str:
@@ -74,7 +74,7 @@ def iface_of(vm: str) -> str:
 
 
 def discover_cluster() -> Dict[str, object]:
-    nodes = ["node1", "node2", "node3", "node4"]
+    nodes = ["node1", "node2", "node3"]
     return {
         "ips": {vm: ip_of(vm) for vm in nodes},
         "ifaces": {vm: iface_of(vm) for vm in nodes},
@@ -82,14 +82,14 @@ def discover_cluster() -> Dict[str, object]:
 
 
 def stop_all() -> None:
-    for vm in ["node1", "node2", "node3", "node4"]:
+    for vm in ["node1", "node2", "node3"]:
         multipass(vm, "pkill -f 'python3.*raft_node.py' 2>/dev/null; true", check=False)
     time.sleep(1)
 
 
 def unload_ebpf(cluster: Dict[str, object]) -> None:
     ifaces: Dict[str, str] = cluster["ifaces"]  # type: ignore[assignment]
-    for vm in ["node1", "node2", "node3", "node4"]:
+    for vm in ["node1", "node2", "node3"]:
         iface = ifaces[vm]
         multipass(
             vm,
@@ -101,7 +101,7 @@ def unload_ebpf(cluster: Dict[str, object]) -> None:
 def compile_and_load_ebpf(cluster: Dict[str, object], cfg: ExperimentConfig) -> None:
     ifaces: Dict[str, str] = cluster["ifaces"]  # type: ignore[assignment]
 
-    for vm in ["node2", "node3", "node4"]:
+    for vm in ["node2", "node3"]:
         multipass(vm, "cd ~/electrode-lab/xdp && make clean && make follower")
         multipass(vm, f"cd ~/electrode-lab/xdp && sudo make load-follower IFACE={ifaces[vm]}")
 
@@ -115,18 +115,25 @@ def compile_and_load_ebpf(cluster: Dict[str, object], cfg: ExperimentConfig) -> 
             "node1",
             f"cd ~/electrode-lab/xdp && sudo make load-broadcast IFACE={ifaces['node1']}",
         )
+        ips: Dict[str, str] = cluster["ips"]  # type: ignore[assignment]
+        multipass(
+            "node1",
+            "cd ~/electrode-lab && "
+            f"sudo python3 xdp/configure_broadcast.py {ifaces['node1']} "
+            f"{ips['node2']} {ips['node3']}",
+        )
 
 
 def seed_for(vm: str, cfg: ExperimentConfig) -> str:
     if not cfg.lag_demo:
         return ""
-    if vm == "node4":
+    if vm == "node3":
         return cfg.lagged_seed_terms
     return cfg.follower_seed_terms
 
 
 def start_followers(label: str, cfg: ExperimentConfig, drain_bpf: bool) -> None:
-    for node_id, vm in enumerate(["node2", "node3", "node4"], start=2):
+    for node_id, vm in enumerate(["node2", "node3"], start=2):
         args = [
             "python3 protocol/raft_node.py --role follower",
             f"--node-id {node_id}",
@@ -159,7 +166,9 @@ def start_leader(label: str, cfg: ExperimentConfig, cluster: Dict[str, object], 
         args.append("--use-kernel-quorum")
     elif cfg.lag_demo:
         args.append("--wait-for-all")
-    args.extend([ips["node2"], ips["node3"], ips["node4"]])
+    if use_kernel_quorum and cfg.enable_tc_broadcast:
+        args.append("--use-kernel-broadcast")
+    args.extend([ips["node2"], ips["node3"]])
     cmd = " ".join(args)
     multipass("node1", f"cd ~/electrode-lab && nohup {cmd} > /tmp/raft_leader_{label}.log 2>&1 &")
     time.sleep(2)
@@ -198,7 +207,7 @@ def collect_logs(label: str, results_dir: Path, include_ebpf: bool) -> Dict[str,
     )
     out["node1_leader_log"] = str(leader_log)
 
-    for vm in ["node2", "node3", "node4"]:
+    for vm in ["node2", "node3"]:
         path = results_dir / f"{vm}_follower_{label}.log"
         path.write_text(
             multipass(vm, f"cat /tmp/raft_follower_{label}.log 2>/dev/null || true", check=False),
@@ -207,7 +216,7 @@ def collect_logs(label: str, results_dir: Path, include_ebpf: bool) -> Dict[str,
         out[f"{vm}_follower_log"] = str(path)
 
     if include_ebpf:
-        for vm in ["node1", "node2", "node3", "node4"]:
+        for vm in ["node1", "node2", "node3"]:
             stats = results_dir / f"{vm}_ebpf_{label}.txt"
             stats.write_text(
                 multipass(

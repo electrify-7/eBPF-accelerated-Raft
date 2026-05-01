@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copies the Raft/XDP lab code to all four VMs.
+# Copies the Raft/XDP lab code to all three VMs.
 
 set -euo pipefail
 
@@ -7,7 +7,7 @@ GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $1"; }
 warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 
-NODES=("node1" "node2" "node3" "node4")
+NODES=("node1" "node2" "node3")
 DIRS=("xdp" "protocol" "benchmark")
 
 declare -A NODE_IP
@@ -22,7 +22,6 @@ warn "Raft cluster layout:"
 echo "  LEADER    (node1): ${NODE_IP[node1]}"
 echo "  FOLLOWER  (node2): ${NODE_IP[node2]}"
 echo "  FOLLOWER  (node3): ${NODE_IP[node3]}"
-echo "  FOLLOWER  (node4): ${NODE_IP[node4]}"
 echo ""
 
 for name in "${NODES[@]}"; do
@@ -44,9 +43,8 @@ LEADER_NAME=node1
 LEADER_IP=${NODE_IP[node1]}
 FOLLOWER1_IP=${NODE_IP[node2]}
 FOLLOWER2_IP=${NODE_IP[node3]}
-FOLLOWER3_IP=${NODE_IP[node4]}
 RAFT_PORT=9000
-CLUSTER_SIZE=4
+CLUSTER_SIZE=3
 EOF
 )
     echo "$CONFIG" | multipass exec "$name" -- bash -c "cat > ~/electrode-lab/node_config.env"

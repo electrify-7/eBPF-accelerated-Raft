@@ -45,7 +45,7 @@ echo "[VM] Setup complete on $(hostname), kernel $(uname -r)"
 INNER
 )
 
-NODES=("node1" "node2" "node3" "node4")
+NODES=("node1" "node2" "node3")
 for name in "${NODES[@]}"; do
     log "Provisioning $name ..."
     multipass exec "$name" -- bash -c "$SETUP_SCRIPT"

@@ -1,10 +1,10 @@
 # Electrode Raft Lab
 
-This repo contains a small four-node Raft benchmark designed for your Multipass
+This repo contains a small three-node Raft benchmark designed for your Multipass
 VMs:
 
 - `node1`: fixed Raft leader
-- `node2`, `node3`, `node4`: Raft followers
+- `node2`, `node3`: Raft followers
 - host machine: benchmark client and analysis
 
 The baseline path runs all Raft follower logic in Python. The eBPF path uses:
@@ -13,9 +13,11 @@ The baseline path runs all Raft follower logic in Python. The eBPF path uses:
   matches the in-kernel last-log metadata
 - follower XDP pass-up on mismatch, so Python returns optimized Raft conflict
   hints (`conflictTerm`, `conflictIndex`)
-- leader XDP quorum filtering, where ACKs are dropped until the remote majority
-  is reached and the quorum-reaching ACK is marked for userspace
-- an experimental TC broadcast scaffold using `bpf_clone_redirect()`
+- leader XDP quorum filtering, where follower ACKs are dropped until the remote
+  quorum needed for a three-node Raft majority is reached, and the
+  quorum-reaching ACK is marked for userspace
+- leader TC egress broadcast using destination IP/MAC rewrites plus
+  `bpf_clone_redirect()`
 
 This is an experiment harness, not a production Raft implementation. It uses a
 fixed leader to focus on replication latency. The XDP fast path keeps volatile
@@ -43,7 +45,7 @@ xdp = run_with_ebpf()
 
 By default, the main `baseline.csv` and `xdp.csv` runs measure normal steady
 state replication. The experiment also writes one-request conflict probes
-(`baseline_conflict.csv`, `xdp_conflict.csv`) where node4 starts with a
+(`baseline_conflict.csv`, `xdp_conflict.csv`) where node3 starts with a
 divergent log so the leader exercises optimized Raft backtracking.
 
 ## Useful Manual Commands
@@ -60,9 +62,18 @@ On a follower VM:
 cd ~/electrode-lab/xdp
 make
 make load-follower IFACE=ens3
-make load-quorum IFACE=ens3
 make unload IFACE=ens3
 make stats
+```
+
+On the leader VM:
+
+```bash
+cd ~/electrode-lab/xdp
+make leader
+make load-quorum IFACE=ens3
+make load-broadcast IFACE=ens3
+sudo python3 configure_broadcast.py ens3 <node2-ip> <node3-ip>
 ```
 
 Use the actual VM interface name from:

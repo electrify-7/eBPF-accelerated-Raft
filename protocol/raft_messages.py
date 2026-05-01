@@ -12,7 +12,7 @@ Header layout, in network byte order:
     u32 prev_log_term
     u32 leader_commit
     u16 node_id            follower id in AppendEntries/AppendResponse
-    u16 flags              SUCCESS / QUORUM_REACHED / EBPF_FAST
+    u16 flags              SUCCESS / QUORUM_REACHED / EBPF_FAST / BROADCAST_REQUEST
     u32 conflict_term      optimized Raft conflict hint
     u32 conflict_index     optimized Raft conflict hint
     u16 payload length

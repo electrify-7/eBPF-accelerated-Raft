@@ -6,7 +6,7 @@ BROADCAST_OBJ := raft_leader_broadcast_tc.o
 
 BPF_CFLAGS := -O2 -g -Wall -target bpf -D__TARGET_ARCH_x86
 
-.PHONY: all follower leader clean load load-follower load-quorum load-broadcast unload reload stats show
+.PHONY: all follower leader clean load load-follower load-quorum load-broadcast configure-broadcast unload reload stats show
 
 all: follower leader
 
@@ -42,6 +42,12 @@ load-broadcast: $(BROADCAST_OBJ)
 	sudo tc qdisc add dev $(IFACE) clsact 2>/dev/null || true
 	sudo tc filter replace dev $(IFACE) egress bpf da obj $(BROADCAST_OBJ) sec tc
 
+configure-broadcast:
+	@test -n "$(IFACE)" || (echo "Usage: make configure-broadcast IFACE=<interface> FOLLOWER1=<ip> FOLLOWER2=<ip>"; exit 1)
+	@test -n "$(FOLLOWER1)" || (echo "Usage: make configure-broadcast IFACE=<interface> FOLLOWER1=<ip> FOLLOWER2=<ip>"; exit 1)
+	@test -n "$(FOLLOWER2)" || (echo "Usage: make configure-broadcast IFACE=<interface> FOLLOWER1=<ip> FOLLOWER2=<ip>"; exit 1)
+	sudo python3 configure_broadcast.py $(IFACE) $(FOLLOWER1) $(FOLLOWER2)
+
 unload:
 	@test -n "$(IFACE)" || (echo "Usage: make unload IFACE=<interface>"; exit 1)
 	sudo ip link set dev $(IFACE) xdp off 2>/dev/null || true
@@ -55,6 +61,7 @@ stats:
 	sudo bpftool map dump name raft_last_seen 2>/dev/null || true
 	sudo bpftool map dump name raft_qstats 2>/dev/null || true
 	sudo bpftool map dump name raft_qslots 2>/dev/null | head -40 || true
+	sudo bpftool map dump name raft_fanout 2>/dev/null || true
 	sudo bpftool map dump name raft_tc_stats 2>/dev/null || true
 	sudo bpftool map show | grep -E 'raft_|ringbuf' || true
 

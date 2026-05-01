@@ -32,6 +32,7 @@ from raft_messages import (
     CLIENT_REPLY,
     CLIENT_REQUEST,
     COMMIT_NOTICE,
+    FLAG_BROADCAST_REQUEST,
     FLAG_SUCCESS,
     NACK,
     RAFT_PORT,
@@ -374,6 +375,7 @@ class RaftLeader:
         heartbeat_interval: float,
         seed_terms: str = "",
         use_kernel_quorum: bool = False,
+        use_kernel_broadcast: bool = False,
         wait_for_all: bool = False,
         verbose: bool = False,
     ) -> None:
@@ -387,6 +389,7 @@ class RaftLeader:
         self.timeout = timeout
         self.heartbeat_interval = heartbeat_interval
         self.use_kernel_quorum = use_kernel_quorum
+        self.use_kernel_broadcast = use_kernel_broadcast
         self.wait_for_all = wait_for_all
         self.verbose = verbose
         self.cluster_size = 1 + len(self.followers)
@@ -416,18 +419,22 @@ class RaftLeader:
 
     def heartbeat_loop(self) -> None:
         while self.running:
-            for follower in self.followers:
-                self.send_append(follower, heartbeat=True)
+            if self.use_kernel_broadcast:
+                self.send_broadcast_append(heartbeat=True)
+            else:
+                for follower in self.followers:
+                    self.send_append(follower, heartbeat=True)
             time.sleep(self.heartbeat_interval)
 
-    def send_append(self, follower: Address, heartbeat: bool = False) -> None:
+    def build_append_frame(self, follower: Address, heartbeat: bool = False, broadcast: bool = False) -> bytes:
         next_idx = self.next_index[follower]
         prev_idx = max(0, next_idx - 1)
         prev_term = self.log_store.term_at(prev_idx)
-        node_id = self.follower_ids[follower]
+        node_id = 0 if broadcast else self.follower_ids[follower]
+        flags = FLAG_BROADCAST_REQUEST if broadcast else 0
 
         if heartbeat or next_idx > self.log_store.last_index:
-            frame = pack(
+            return pack(
                 APPEND_ENTRIES,
                 term=self.current_term,
                 index=0,
@@ -435,22 +442,34 @@ class RaftLeader:
                 prev_log_term=max(prev_term, 0),
                 leader_commit=self.commit_index,
                 node_id=node_id,
+                flags=flags,
             )
-        else:
-            entry = self.log_store.entry_at(next_idx)
-            if entry is None:
-                return
-            frame = pack(
-                APPEND_ENTRIES,
-                term=self.current_term,
-                index=entry.index,
-                prev_log_index=prev_idx,
-                prev_log_term=max(prev_term, 0),
-                leader_commit=self.commit_index,
-                node_id=node_id,
-                payload=entry.command,
-            )
-        self.sock.sendto(frame, follower)
+        entry = self.log_store.entry_at(next_idx)
+        if entry is None:
+            return b""
+        return pack(
+            APPEND_ENTRIES,
+            term=self.current_term,
+            index=entry.index,
+            prev_log_index=prev_idx,
+            prev_log_term=max(prev_term, 0),
+            leader_commit=self.commit_index,
+            node_id=node_id,
+            flags=flags,
+            payload=entry.command,
+        )
+
+    def send_append(self, follower: Address, heartbeat: bool = False) -> None:
+        frame = self.build_append_frame(follower, heartbeat=heartbeat)
+        if frame:
+            self.sock.sendto(frame, follower)
+
+    def send_broadcast_append(self, heartbeat: bool = False) -> None:
+        if not self.followers:
+            return
+        frame = self.build_append_frame(self.followers[0], heartbeat=heartbeat, broadcast=True)
+        if frame:
+            self.sock.sendto(frame, self.followers[0])
 
     def replicate(self, payload: bytes) -> int:
         entry = LogEntry(self.log_store.last_index + 1, self.current_term, payload)
@@ -461,11 +480,14 @@ class RaftLeader:
         self.last_conflict_hints = 0
         self.last_quorum_source = "userspace"
 
-        for follower in self.followers:
-            self.send_append(follower)
+        if self.use_kernel_broadcast:
+            self.send_broadcast_append()
+        else:
+            for follower in self.followers:
+                self.send_append(follower)
 
         deadline = time.monotonic() + self.timeout
-        last_resend = 0.0
+        last_resend = time.monotonic()
         while time.monotonic() < deadline:
             if self.has_quorum(target_index, accepted):
                 if not self.wait_for_all:
@@ -477,6 +499,10 @@ class RaftLeader:
             if now - last_resend > 0.05:
                 for follower in self.followers:
                     if self.match_index[follower] < target_index:
+                        if self.use_kernel_broadcast:
+                            self.send_broadcast_append()
+                            self.last_retries += 1
+                            break
                         self.send_append(follower)
                         self.last_retries += 1
                 last_resend = now
@@ -498,9 +524,12 @@ class RaftLeader:
                 if msg.index == 0:
                     continue
                 matched = msg.index
-                self.match_index[addr] = max(self.match_index.get(addr, 0), matched)
-                self.next_index[addr] = max(self.next_index.get(addr, 1), matched + 1)
-                accepted.add(addr[0])
+                if addr in self.match_index:
+                    self.match_index[addr] = max(self.match_index.get(addr, 0), matched)
+                    self.next_index[addr] = max(self.next_index.get(addr, 1), matched + 1)
+                    accepted.add(addr[0])
+                if self.use_kernel_quorum and not msg.quorum_reached:
+                    continue
                 if msg.quorum_reached:
                     for follower in self.followers:
                         self.match_index[follower] = max(self.match_index[follower], matched)
@@ -526,6 +555,8 @@ class RaftLeader:
     def has_quorum(self, target_index: int, accepted: Set[str]) -> bool:
         if self.last_quorum_source == "ebpf":
             return True
+        if self.use_kernel_quorum:
+            return False
         replicated = 1 + sum(1 for idx in self.match_index.values() if idx >= target_index)
         return replicated >= self.quorum or len(accepted) >= self.quorum
 
@@ -551,6 +582,23 @@ class RaftLeader:
     def broadcast_commit(self, entry: LogEntry) -> None:
         prev_idx = max(0, entry.index - 1)
         prev_term = max(0, self.log_store.term_at(prev_idx))
+        if self.use_kernel_broadcast and self.followers:
+            self.sock.sendto(
+                pack(
+                    COMMIT_NOTICE,
+                    term=self.current_term,
+                    index=entry.index,
+                    prev_log_index=prev_idx,
+                    prev_log_term=prev_term,
+                    leader_commit=self.commit_index,
+                    node_id=0,
+                    flags=FLAG_BROADCAST_REQUEST,
+                    payload=entry.command,
+                ),
+                self.followers[0],
+            )
+            return
+
         for follower in self.followers:
             self.sock.sendto(
                 pack(
@@ -568,7 +616,7 @@ class RaftLeader:
 
     def serve(self) -> None:
         self.log(
-            "listening on %s:%d followers=%d quorum=%d last_index=%d kernel_quorum=%s"
+            "listening on %s:%d followers=%d quorum=%d last_index=%d kernel_quorum=%s kernel_broadcast=%s"
             % (
                 self.bind,
                 self.port,
@@ -576,6 +624,7 @@ class RaftLeader:
                 self.quorum,
                 self.log_store.last_index,
                 self.use_kernel_quorum,
+                self.use_kernel_broadcast,
             )
         )
         self.start_heartbeats()
@@ -654,6 +703,7 @@ def main() -> None:
     parser.add_argument("--seed-log-terms", default="")
     parser.add_argument("--drain-bpf", action="store_true")
     parser.add_argument("--use-kernel-quorum", action="store_true")
+    parser.add_argument("--use-kernel-broadcast", action="store_true")
     parser.add_argument("--wait-for-all", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("followers", nargs="*", help="follower IPs, leader role only")
@@ -671,6 +721,7 @@ def main() -> None:
             heartbeat_interval=args.heartbeat_interval,
             seed_terms=args.seed_log_terms,
             use_kernel_quorum=args.use_kernel_quorum,
+            use_kernel_broadcast=args.use_kernel_broadcast,
             wait_for_all=args.wait_for_all,
             verbose=args.verbose,
         ).serve()

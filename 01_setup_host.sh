@@ -1,5 +1,5 @@
 #!/bin/bash
-# Creates the four Ubuntu VMs used by the Raft/XDP lab.
+# Creates the three Ubuntu VMs used by the Raft/XDP lab.
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ else
     log "multipass already installed: $(multipass version | head -1)"
 fi
 
-NODES=("node1" "node2" "node3" "node4")
+NODES=("node1" "node2" "node3")
 for name in "${NODES[@]}"; do
     if multipass info "$name" >/dev/null 2>&1; then
         warn "VM '$name' already exists, skipping creation."
