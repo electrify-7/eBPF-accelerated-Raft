@@ -9,6 +9,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 
 NODES=("node1" "node2" "node3")
 DIRS=("xdp" "protocol" "benchmark")
+REMOTE_DIR="/home/ubuntu/electrode-lab" # Explicit absolute path for the VM
 
 declare -A NODE_IP
 for name in "${NODES[@]}"; do
@@ -26,11 +27,14 @@ echo ""
 
 for name in "${NODES[@]}"; do
     log "Deploying to $name (${NODE_IP[$name]})..."
-    multipass exec "$name" -- mkdir -p ~/electrode-lab/{xdp,protocol,benchmark}
+    
+    # Use the absolute path variable here
+    multipass exec "$name" -- mkdir -p "$REMOTE_DIR"/{xdp,protocol,benchmark}
 
     for dir in "${DIRS[@]}"; do
         for f in "$dir"/*; do
-            [ -f "$f" ] && multipass transfer "$f" "$name":~/electrode-lab/"$f"
+            # Use the absolute path variable here as well
+            [ -f "$f" ] && multipass transfer "$f" "$name":"$REMOTE_DIR"/"$f"
         done
     done
 
@@ -47,7 +51,8 @@ RAFT_PORT=9000
 CLUSTER_SIZE=3
 EOF
 )
-    echo "$CONFIG" | multipass exec "$name" -- bash -c "cat > ~/electrode-lab/node_config.env"
+    # And use the absolute path variable for the config file
+    echo "$CONFIG" | multipass exec "$name" -- bash -c "cat > $REMOTE_DIR/node_config.env"
     log "$name: files and config deployed."
 done
 
