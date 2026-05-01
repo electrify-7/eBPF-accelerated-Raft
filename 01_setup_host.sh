@@ -25,7 +25,7 @@ for name in "${NODES[@]}"; do
         warn "VM '$name' already exists, skipping creation."
     else
         log "Creating VM: $name ..."
-        multipass launch --name "$name" --cpus 2 --memory 2G --disk 10G 22.04
+        multipass launch --name "$name" --cpus 2 --memory 1G --disk 10G 22.04
         log "$name created."
     fi
 done
