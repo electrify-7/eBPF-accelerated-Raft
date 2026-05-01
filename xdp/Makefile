@@ -1,25 +1,51 @@
 CLANG ?= clang
 IFACE ?=
-BPF_OBJ := raft_xdp_fastpath.o
+FOLLOWER_OBJ := raft_xdp_fastpath.o
+QUORUM_OBJ := raft_leader_quorum.o
+BROADCAST_OBJ := raft_leader_broadcast_tc.o
 
 BPF_CFLAGS := -O2 -g -Wall -target bpf -D__TARGET_ARCH_x86
 
-.PHONY: all clean load unload reload stats show
+.PHONY: all follower leader clean load load-follower load-quorum load-broadcast unload reload stats show
 
-all: $(BPF_OBJ)
+all: follower leader
 
-$(BPF_OBJ): raft_xdp_fastpath.c
+follower: $(FOLLOWER_OBJ)
+
+leader: $(QUORUM_OBJ) $(BROADCAST_OBJ)
+
+$(FOLLOWER_OBJ): raft_xdp_fastpath.c
 	$(CLANG) $(BPF_CFLAGS) -c $< -o $@
 
-load: $(BPF_OBJ)
+$(QUORUM_OBJ): raft_leader_quorum.c
+	$(CLANG) $(BPF_CFLAGS) -c $< -o $@
+
+$(BROADCAST_OBJ): raft_leader_broadcast_tc.c
+	$(CLANG) $(BPF_CFLAGS) -c $< -o $@
+
+load: load-follower
+
+load-follower: $(FOLLOWER_OBJ)
 	@test -n "$(IFACE)" || (echo "Usage: make load IFACE=<interface>"; exit 1)
 	sudo ip link set dev $(IFACE) xdp off 2>/dev/null || true
-	sudo ip link set dev $(IFACE) xdp obj $(BPF_OBJ) sec xdp
+	sudo ip link set dev $(IFACE) xdp obj $(FOLLOWER_OBJ) sec xdp
 	ip link show $(IFACE)
+
+load-quorum: $(QUORUM_OBJ)
+	@test -n "$(IFACE)" || (echo "Usage: make load-quorum IFACE=<interface>"; exit 1)
+	sudo ip link set dev $(IFACE) xdp off 2>/dev/null || true
+	sudo ip link set dev $(IFACE) xdp obj $(QUORUM_OBJ) sec xdp
+	ip link show $(IFACE)
+
+load-broadcast: $(BROADCAST_OBJ)
+	@test -n "$(IFACE)" || (echo "Usage: make load-broadcast IFACE=<interface>"; exit 1)
+	sudo tc qdisc add dev $(IFACE) clsact 2>/dev/null || true
+	sudo tc filter replace dev $(IFACE) egress bpf da obj $(BROADCAST_OBJ) sec tc
 
 unload:
 	@test -n "$(IFACE)" || (echo "Usage: make unload IFACE=<interface>"; exit 1)
 	sudo ip link set dev $(IFACE) xdp off 2>/dev/null || true
+	sudo tc filter del dev $(IFACE) egress 2>/dev/null || true
 
 reload: unload load
 
@@ -27,10 +53,13 @@ stats:
 	sudo bpftool map dump name raft_stats 2>/dev/null || true
 	sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
 	sudo bpftool map dump name raft_last_seen 2>/dev/null || true
+	sudo bpftool map dump name raft_qstats 2>/dev/null || true
+	sudo bpftool map dump name raft_qslots 2>/dev/null | head -40 || true
+	sudo bpftool map dump name raft_tc_stats 2>/dev/null || true
 	sudo bpftool map show | grep -E 'raft_|ringbuf' || true
 
 show:
-	sudo bpftool prog show | grep -A2 raft_fastpath || true
+	sudo bpftool prog show | grep -A2 'raft_' || true
 
 clean:
-	rm -f $(BPF_OBJ)
+	rm -f $(FOLLOWER_OBJ) $(QUORUM_OBJ) $(BROADCAST_OBJ)

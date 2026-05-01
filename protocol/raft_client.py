@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
-"""Sequential UDP client for the fixed-leader Raft benchmark."""
+"""Sequential UDP client for the Raft benchmark."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import socket
 import statistics
 import sys
 import time
-from typing import List
+from typing import Dict, List
 
-from raft_messages import CLIENT_REPLY, CLIENT_REQUEST, NACK, RAFT_PORT, csv_header, pack, unpack
+from raft_messages import (
+    CLIENT_REPLY,
+    CLIENT_REQUEST,
+    FLAG_SUCCESS,
+    NACK,
+    RAFT_PORT,
+    csv_header,
+    pack,
+    unpack,
+)
 
 
 def percentile(values: List[int], pct: float) -> int:
@@ -23,6 +33,16 @@ def percentile(values: List[int], pct: float) -> int:
     return ordered[idx]
 
 
+def parse_reply(payload: bytes) -> Dict[str, object]:
+    if not payload:
+        return {}
+    try:
+        obj = json.loads(payload.decode())
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("leader_ip")
@@ -31,6 +51,7 @@ def main() -> None:
     parser.add_argument("--payload-bytes", type=int, default=64)
     parser.add_argument("--timeout", type=float, default=2.0)
     parser.add_argument("--out", default="")
+    parser.add_argument("--command-prefix", default="cmd")
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -40,23 +61,38 @@ def main() -> None:
     rows = []
     latencies: List[int] = []
     failures = 0
+    total_retries = 0
+    total_conflicts = 0
+    kernel_quorum = 0
     wall_start = time.perf_counter()
 
     for seq in range(1, args.count + 1):
-        payload = (
-            rng.randbytes(args.payload_bytes)
+        random_bytes = (
+            rng.randbytes(max(0, args.payload_bytes - 32))
             if hasattr(rng, "randbytes")
-            else os.urandom(args.payload_bytes)
+            else os.urandom(max(0, args.payload_bytes - 32))
         )
+        command = f"{args.command_prefix}-{seq}:".encode() + random_bytes
         start = time.perf_counter_ns()
-        sock.sendto(pack(CLIENT_REQUEST, 0, seq, 0, payload), leader)
+        sock.sendto(pack(CLIENT_REQUEST, index=seq, payload=command), leader)
+
         status = "ok"
         latency_us = 0
+        leader_index = 0
+        retries = 0
+        conflict_hints = 0
+        quorum_source = "userspace"
         try:
             data, _ = sock.recvfrom(65535)
             latency_us = (time.perf_counter_ns() - start) // 1000
             msg = unpack(data)
-            if msg.msg_type != CLIENT_REPLY:
+            if msg.msg_type == CLIENT_REPLY and (msg.flags & FLAG_SUCCESS):
+                reply = parse_reply(msg.payload)
+                leader_index = int(reply.get("index", msg.index) or 0)
+                retries = int(reply.get("retries", 0) or 0)
+                conflict_hints = int(reply.get("conflict_hints", 0) or 0)
+                quorum_source = str(reply.get("quorum_source", "userspace"))
+            else:
                 status = "nack" if msg.msg_type == NACK else msg.type_name
         except Exception as exc:
             status = f"error:{type(exc).__name__}"
@@ -66,7 +102,15 @@ def main() -> None:
             latencies.append(latency_us)
         else:
             failures += 1
-        rows.append(f"{seq},{status},{latency_us},{args.payload_bytes}\n")
+        total_retries += retries
+        total_conflicts += conflict_hints
+        if quorum_source == "ebpf":
+            kernel_quorum += 1
+
+        rows.append(
+            f"{seq},{status},{latency_us},{len(command)},{leader_index},"
+            f"{retries},{conflict_hints},{quorum_source}\n"
+        )
 
         if seq % 500 == 0:
             print(f"completed {seq}/{args.count}", file=sys.stderr, flush=True)
@@ -86,6 +130,9 @@ def main() -> None:
     print(f"p95_us={percentile(latencies, 95)}")
     print(f"p99_us={percentile(latencies, 99)}")
     print(f"wall_clock_throughput_req_s={throughput:.1f}")
+    print(f"leader_retries={total_retries}")
+    print(f"conflict_hints={total_conflicts}")
+    print(f"kernel_quorum_replies={kernel_quorum}")
 
     if failures:
         sys.exit(1)

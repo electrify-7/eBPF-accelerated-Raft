@@ -1,14 +1,13 @@
-// XDP fast path for the Raft benchmark.
+// Follower-side XDP fast path for Raft AppendEntries.
 //
-// Runs on follower nodes. It learns the first leader IP that sends a Raft
-// APPEND_ENTRIES packet, then:
-//   - fast-acks heartbeat packets (index=0, payload_len=0)
-//   - fast-acks log append packets and records volatile metadata in BPF maps
-//   - emits an event into a BPF ring buffer for observability
+// Runs on follower nodes. It keeps volatile metadata for the last log entry in
+// BPF maps. If an AppendEntries packet's prevLogIndex/prevLogTerm matches that
+// metadata, the program records the append in raft_fast_log / raft_events and
+// immediately rewrites the packet into a successful AppendResponse via XDP_TX.
 //
-// COMMIT_NOTICE packets still go to userspace so the Python follower can apply
-// entries. This keeps the benchmark easy to reason about while removing the
-// follower userspace scheduling delay from the AppendEntries quorum path.
+// If the prevLog fields do not match, the packet is passed to userspace. The
+// Python follower then drains any XDP metadata it can see and returns the
+// optimized Raft conflict hint: conflictTerm/conflictIndex.
 
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
@@ -22,16 +21,29 @@
 #define MSG_APPEND_ENTRIES 0x20
 #define MSG_APPEND_RESPONSE 0x21
 
+#define FLAG_SUCCESS 0x0001
+#define FLAG_EBPF_FAST 0x0004
+
+struct raft_state_value {
+    __u32 current_term;
+    __u32 last_index;
+    __u32 last_term;
+};
+
 struct fast_log_entry {
     __u32 term;
     __u16 payload_len;
+    __u16 _pad;
     __u64 timestamp_ns;
 };
 
 struct raft_event {
     __u32 term;
     __u32 index;
+    __u32 prev_index;
+    __u32 prev_term;
     __u16 payload_len;
+    __u16 node_id;
     __u64 timestamp_ns;
 };
 
@@ -40,15 +52,15 @@ struct raft_event {
 // raft_stats[2] = non-AppendEntries Raft packets passed to userspace
 // raft_stats[3] = stale term AppendEntries packets passed to userspace
 // raft_stats[4] = packets from a non-leader source passed to userspace
+// raft_stats[5] = prevLog mismatches passed to userspace
+// raft_stats[6] = duplicate appends fast-acked
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 5);
+    __uint(max_entries, 7);
     __type(key, __u32);
     __type(value, __u64);
 } raft_stats SEC(".maps");
 
-// Learned leader IPv4 address, stored in network byte order. A zero value means
-// "not learned yet".
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
@@ -56,15 +68,13 @@ struct {
     __type(value, __be32);
 } raft_leader_ip SEC(".maps");
 
-// Highest term observed by this XDP follower path.
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
     __type(key, __u32);
-    __type(value, __u32);
-} raft_term SEC(".maps");
+    __type(value, struct raft_state_value);
+} raft_state SEC(".maps");
 
-// Last leader packet timestamp in ns since boot.
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
@@ -72,8 +82,6 @@ struct {
     __type(value, __u64);
 } raft_last_seen SEC(".maps");
 
-// Volatile in-kernel append metadata. The userspace follower receives the
-// payload on COMMIT_NOTICE and applies it there.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 65536);
@@ -104,6 +112,20 @@ static __always_inline __u16 read_be16(__u8 *p)
     return ((__u16)p[0] << 8) | (__u16)p[1];
 }
 
+static __always_inline void write_be32(__u8 *p, __u32 value)
+{
+    p[0] = value >> 24;
+    p[1] = value >> 16;
+    p[2] = value >> 8;
+    p[3] = value;
+}
+
+static __always_inline void write_be16(__u8 *p, __u16 value)
+{
+    p[0] = value >> 8;
+    p[1] = value;
+}
+
 static __always_inline void swap_mac(struct ethhdr *eth)
 {
     __u8 tmp[ETH_ALEN];
@@ -122,6 +144,15 @@ static __always_inline __u16 ipv4_csum(struct iphdr *ip)
     sum = (sum & 0xffff) + (sum >> 16);
     sum += (sum >> 16);
     return (__u16)(~sum);
+}
+
+static __always_inline int prev_matches(struct raft_state_value *state,
+                                        __u32 prev_index,
+                                        __u32 prev_term)
+{
+    if (prev_index == 0 && prev_term == 0)
+        return 1;
+    return prev_index == state->last_index && prev_term == state->last_term;
 }
 
 SEC("xdp")
@@ -149,7 +180,7 @@ int raft_fastpath(struct xdp_md *ctx)
         return XDP_PASS;
 
     __u8 *payload = (void *)(udp + 1);
-    if ((void *)(payload + 15) > data_end)
+    if ((void *)(payload + 35) > data_end)
         return XDP_PASS;
 
     if (payload[0] != MSG_APPEND_ENTRIES) {
@@ -170,15 +201,27 @@ int raft_fastpath(struct xdp_md *ctx)
 
     __u32 term = read_be32(payload + 1);
     __u32 index = read_be32(payload + 5);
-    __u16 payload_len = read_be16(payload + 13);
-    __u32 *current_term = bpf_map_lookup_elem(&raft_term, &zero);
-    if (current_term) {
-        if (term < *current_term) {
-            bump_stat(3);
-            return XDP_PASS;
-        }
-        if (term > *current_term)
-            *current_term = term;
+    __u32 prev_index = read_be32(payload + 9);
+    __u32 prev_term = read_be32(payload + 13);
+    __u16 node_id = read_be16(payload + 21);
+    __u16 payload_len = read_be16(payload + 33);
+    if ((void *)(payload + 35 + payload_len) > data_end)
+        return XDP_PASS;
+
+    struct raft_state_value *state = bpf_map_lookup_elem(&raft_state, &zero);
+    if (!state)
+        return XDP_PASS;
+
+    if (term < state->current_term) {
+        bump_stat(3);
+        return XDP_PASS;
+    }
+    if (term > state->current_term)
+        state->current_term = term;
+
+    if (!prev_matches(state, prev_index, prev_term)) {
+        bump_stat(5);
+        return XDP_PASS;
     }
 
     __u64 now = bpf_ktime_get_ns();
@@ -188,26 +231,41 @@ int raft_fastpath(struct xdp_md *ctx)
 
     if (index == 0 && payload_len == 0) {
         bump_stat(1);
-    } else {
+    } else if (index == state->last_index + 1 && payload_len > 0) {
         struct fast_log_entry entry = {
             .term = term,
             .payload_len = payload_len,
             .timestamp_ns = now,
         };
         bpf_map_update_elem(&raft_fast_log, &index, &entry, BPF_ANY);
+        state->last_index = index;
+        state->last_term = term;
 
         struct raft_event *event = bpf_ringbuf_reserve(&raft_events, sizeof(*event), 0);
         if (event) {
             event->term = term;
             event->index = index;
+            event->prev_index = prev_index;
+            event->prev_term = prev_term;
             event->payload_len = payload_len;
+            event->node_id = node_id;
             event->timestamp_ns = now;
             bpf_ringbuf_submit(event, 0);
         }
         bump_stat(0);
+    } else if (index <= state->last_index) {
+        bump_stat(6);
+    } else {
+        bump_stat(5);
+        return XDP_PASS;
     }
 
     payload[0] = MSG_APPEND_RESPONSE;
+    if (index == 0)
+        write_be32(payload + 5, state->last_index);
+    write_be16(payload + 23, FLAG_SUCCESS | FLAG_EBPF_FAST);
+    write_be32(payload + 25, 0);
+    write_be32(payload + 29, 0);
 
     __be32 old_saddr = ip->saddr;
     ip->saddr = ip->daddr;
