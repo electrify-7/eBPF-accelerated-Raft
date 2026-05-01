@@ -64,6 +64,7 @@ def main() -> None:
     total_retries = 0
     total_conflicts = 0
     kernel_quorum = 0
+    failure_samples: List[str] = []
     wall_start = time.perf_counter()
 
     for seq in range(1, args.count + 1):
@@ -82,6 +83,7 @@ def main() -> None:
         retries = 0
         conflict_hints = 0
         quorum_source = "userspace"
+        detail = ""
         try:
             data, _ = sock.recvfrom(65535)
             latency_us = (time.perf_counter_ns() - start) // 1000
@@ -94,14 +96,18 @@ def main() -> None:
                 quorum_source = str(reply.get("quorum_source", "userspace"))
             else:
                 status = "nack" if msg.msg_type == NACK else msg.type_name
+                detail = msg.payload.decode(errors="replace")
         except Exception as exc:
             status = f"error:{type(exc).__name__}"
+            detail = str(exc)
             latency_us = (time.perf_counter_ns() - start) // 1000
 
         if status == "ok":
             latencies.append(latency_us)
         else:
             failures += 1
+            if len(failure_samples) < 10:
+                failure_samples.append(f"seq={seq} status={status} detail={detail}")
         total_retries += retries
         total_conflicts += conflict_hints
         if quorum_source == "ebpf":
@@ -133,6 +139,8 @@ def main() -> None:
     print(f"leader_retries={total_retries}")
     print(f"conflict_hints={total_conflicts}")
     print(f"kernel_quorum_replies={kernel_quorum}")
+    for sample in failure_samples:
+        print(f"failure_sample={sample}")
 
     if failures:
         sys.exit(1)

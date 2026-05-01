@@ -528,8 +528,6 @@ class RaftLeader:
                     self.match_index[addr] = max(self.match_index.get(addr, 0), matched)
                     self.next_index[addr] = max(self.next_index.get(addr, 1), matched + 1)
                     accepted.add(addr[0])
-                if self.use_kernel_quorum and not msg.quorum_reached:
-                    continue
                 if msg.quorum_reached:
                     for follower in self.followers:
                         self.match_index[follower] = max(self.match_index[follower], matched)
@@ -555,8 +553,6 @@ class RaftLeader:
     def has_quorum(self, target_index: int, accepted: Set[str]) -> bool:
         if self.last_quorum_source == "ebpf":
             return True
-        if self.use_kernel_quorum:
-            return False
         replicated = 1 + sum(1 for idx in self.match_index.values() if idx >= target_index)
         return replicated >= self.quorum or len(accepted) >= self.quorum
 
@@ -679,6 +675,7 @@ class RaftLeader:
                         )
                     )
             except Exception as exc:
+                self.log(f"request failed: {exc}")
                 self.sock.sendto(
                     pack(
                         NACK,

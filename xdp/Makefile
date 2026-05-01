@@ -39,8 +39,9 @@ load-quorum: $(QUORUM_OBJ)
 
 load-broadcast: $(BROADCAST_OBJ)
 	@test -n "$(IFACE)" || (echo "Usage: make load-broadcast IFACE=<interface>"; exit 1)
-	sudo tc qdisc add dev $(IFACE) clsact 2>/dev/null || true
-	sudo tc filter replace dev $(IFACE) egress bpf da obj $(BROADCAST_OBJ) sec tc
+	sudo tc qdisc del dev $(IFACE) clsact 2>/dev/null || true
+	sudo tc qdisc add dev $(IFACE) clsact
+	sudo tc filter add dev $(IFACE) egress protocol ip bpf da obj $(BROADCAST_OBJ) sec tc
 
 configure-broadcast:
 	@test -n "$(IFACE)" || (echo "Usage: make configure-broadcast IFACE=<interface> FOLLOWER1=<ip> FOLLOWER2=<ip>"; exit 1)
@@ -51,11 +52,12 @@ configure-broadcast:
 unload:
 	@test -n "$(IFACE)" || (echo "Usage: make unload IFACE=<interface>"; exit 1)
 	sudo ip link set dev $(IFACE) xdp off 2>/dev/null || true
-	sudo tc filter del dev $(IFACE) egress 2>/dev/null || true
+	sudo tc qdisc del dev $(IFACE) clsact 2>/dev/null || true
 
 reload: unload load
 
 stats:
+	@if [ -n "$(IFACE)" ]; then sudo tc filter show dev $(IFACE) egress 2>/dev/null || true; fi
 	sudo bpftool map dump name raft_stats 2>/dev/null || true
 	sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
 	sudo bpftool map dump name raft_last_seen 2>/dev/null || true

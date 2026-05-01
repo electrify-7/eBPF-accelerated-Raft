@@ -287,6 +287,8 @@ def run_client(label: str, cfg: ExperimentConfig, cluster: Dict[str, object], re
 
 def collect_logs(label: str, results_dir: Path, include_ebpf: bool) -> Dict[str, str]:
     out: Dict[str, str] = {}
+    cluster = discover_cluster()
+    ifaces: Dict[str, str] = cluster["ifaces"]  # type: ignore[assignment]
     leader_log = results_dir / f"node1_leader_{label}.log"
     leader_log.write_text(
         multipass("node1", f"cat /tmp/raft_leader_{label}.log 2>/dev/null || true", check=False),
@@ -308,7 +310,7 @@ def collect_logs(label: str, results_dir: Path, include_ebpf: bool) -> Dict[str,
             stats.write_text(
                 multipass(
                     vm,
-                    "cd ~/electrode-lab/xdp && sudo make stats 2>/dev/null || true",
+                    f"cd ~/electrode-lab/xdp && make stats IFACE={ifaces[vm]} 2>/dev/null || true",
                     check=False,
                 ),
                 encoding="utf-8",
