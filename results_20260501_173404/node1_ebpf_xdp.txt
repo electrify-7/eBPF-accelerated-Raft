@@ -1,0 +1,99 @@
+sudo bpftool map dump name raft_stats 2>/dev/null || true
+sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
+sudo bpftool map dump name raft_last_seen 2>/dev/null || true
+sudo bpftool map dump name raft_qstats 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 0
+    },{
+        "key": 1,
+        "value": 0
+    },{
+        "key": 2,
+        "value": 100
+    }
+]
+sudo bpftool map dump name raft_qslots 2>/dev/null | head -40 || true
+[{
+        "key": 0,
+        "value": {
+            "seq": 0,
+            "bitset": 0,
+            "count": 0
+        }
+    },{
+        "key": 1,
+        "value": {
+            "seq": 0,
+            "bitset": 0,
+            "count": 0
+        }
+    },{
+        "key": 2,
+        "value": {
+            "seq": 0,
+            "bitset": 0,
+            "count": 0
+        }
+    },{
+        "key": 3,
+        "value": {
+            "seq": 0,
+            "bitset": 0,
+            "count": 0
+        }
+    },{
+        "key": 4,
+        "value": {
+            "seq": 0,
+            "bitset": 0,
+            "count": 0
+        }
+    },{
+        "key": 5,
+        "value": {
+            "seq": 0,
+            "bitset": 0,
+sudo bpftool map dump name raft_fanout 2>/dev/null || true
+[{
+        "key": 0,
+        "value": {
+            "ifindex": 2,
+            "dst_ip": 1687970826,
+            "dst_mac": [82,84,0,88,226,5
+            ],
+            "node_id": 2,
+            "pad": 0
+        }
+    },{
+        "key": 1,
+        "value": {
+            "ifindex": 2,
+            "dst_ip": 2744935434,
+            "dst_mac": [82,84,0,26,116,28
+            ],
+            "node_id": 3,
+            "pad": 0
+        }
+    }
+]
+sudo bpftool map dump name raft_tc_stats 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 2582052
+    },{
+        "key": 1,
+        "value": 0
+    },{
+        "key": 2,
+        "value": 1291026
+    },{
+        "key": 3,
+        "value": 0
+    }
+]
+sudo bpftool map show | grep -E 'raft_|ringbuf' || true
+7: array  name raft_qslots  flags 0x0
+8: array  name raft_qstats  flags 0x0
+9: array  name raft_fanout  flags 0x0
+10: array  name raft_tc_stats  flags 0x0

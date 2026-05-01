@@ -1,0 +1,46 @@
+sudo bpftool map dump name raft_stats 2>/dev/null || true
+sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
+sudo bpftool map dump name raft_last_seen 2>/dev/null || true
+sudo bpftool map dump name raft_qstats 2>/dev/null || true
+sudo bpftool map dump name raft_qslots 2>/dev/null | head -40 || true
+sudo bpftool map dump name raft_fanout 2>/dev/null || true
+[{
+        "key": 0,
+        "value": {
+            "ifindex": 2,
+            "dst_ip": 1687970826,
+            "dst_mac": [82,84,0,88,226,5
+            ],
+            "node_id": 2,
+            "pad": 0
+        }
+    },{
+        "key": 1,
+        "value": {
+            "ifindex": 2,
+            "dst_ip": 2744935434,
+            "dst_mac": [82,84,0,26,116,28
+            ],
+            "node_id": 3,
+            "pad": 0
+        }
+    }
+]
+sudo bpftool map dump name raft_tc_stats 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 102300
+    },{
+        "key": 1,
+        "value": 0
+    },{
+        "key": 2,
+        "value": 51150
+    },{
+        "key": 3,
+        "value": 0
+    }
+]
+sudo bpftool map show | grep -E 'raft_|ringbuf' || true
+11: array  name raft_fanout  flags 0x0
+12: array  name raft_tc_stats  flags 0x0
