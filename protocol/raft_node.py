@@ -485,7 +485,7 @@ class RaftLeader:
     def send_broadcast_append(self, heartbeat: bool = False) -> None:
         if not self.followers:
             return
-        follower = min(self.followers, key=lambda item: self.next_index.get(item, 1))
+        follower = max(self.followers, key=lambda item: self.next_index.get(item, 1))
         frame = self.build_append_frame(follower, heartbeat=heartbeat, broadcast=True)
         if frame:
             self.sock.sendto(frame, self.followers[0])

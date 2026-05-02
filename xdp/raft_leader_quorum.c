@@ -34,7 +34,7 @@ struct {
     __type(value, struct quorum_slot);
 } raft_qslots SEC(".maps");
 
-// raft_qstats[0] = ACKs dropped before quorum
+// raft_qstats[0] = ACKs dropped before quorum or after quorum already passed
 // raft_qstats[1] = ACKs passed with quorum mark
 // raft_qstats[2] = non-Raft/non-response packets passed
 struct {
@@ -127,10 +127,16 @@ int raft_quorum(struct xdp_md *ctx)
         slot->count = 0;
     }
 
+    int already_reached = slot->count >= QUORUM_REMOTE_ACKS;
     __u32 bit = 1U << node_id;
     if (!(slot->bitset & bit)) {
         slot->bitset |= bit;
         slot->count += 1;
+    }
+
+    if (already_reached) {
+        bump_stat(0);
+        return XDP_DROP;
     }
 
     if (slot->count >= QUORUM_REMOTE_ACKS) {

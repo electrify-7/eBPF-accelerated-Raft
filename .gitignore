@@ -1,5 +1,2 @@
-__pycache__/
-*.py[cod]
-*.o
-results_*/
-.DS_Store
+100
+500MS
