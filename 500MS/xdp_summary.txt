@@ -1,0 +1,22 @@
+requests=500
+success=348
+failures=152
+mean_us=196.0
+p50_us=192
+p95_us=235
+p99_us=615
+wall_clock_throughput_req_s=2.3
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=348
+failure_sample=seq=349 status=error:TimeoutError detail=timed out
+failure_sample=seq=350 status=nack detail=index 349: got 1 replicas, need 2
+failure_sample=seq=351 status=error:TimeoutError detail=timed out
+failure_sample=seq=352 status=nack detail=index 350: got 1 replicas, need 2
+failure_sample=seq=353 status=error:TimeoutError detail=timed out
+failure_sample=seq=354 status=nack detail=index 351: got 1 replicas, need 2
+failure_sample=seq=355 status=error:TimeoutError detail=timed out
+failure_sample=seq=356 status=nack detail=index 352: got 1 replicas, need 2
+failure_sample=seq=357 status=error:TimeoutError detail=timed out
+failure_sample=seq=358 status=nack detail=index 353: got 1 replicas, need 2
+completed 500/500

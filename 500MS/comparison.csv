@@ -1,0 +1,11 @@
+metric,baseline,xdp
+count,500,348
+mean_us,248.8,196.0
+median_us,239.0,192.0
+p95_us,320,235
+p99_us,457,615
+leader_retries,0,0
+conflict_hints,0,0
+kernel_quorum_replies,0,348
+mean_latency_speedup,1.269,
+mean_latency_reduction_pct,21.2,

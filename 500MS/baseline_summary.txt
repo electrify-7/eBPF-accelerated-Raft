@@ -1,0 +1,12 @@
+requests=500
+success=500
+failures=0
+mean_us=248.8
+p50_us=239
+p95_us=320
+p99_us=457
+wall_clock_throughput_req_s=3837.4
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=0
+completed 500/500
