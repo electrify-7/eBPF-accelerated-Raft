@@ -1,0 +1,15 @@
+requests=1
+success=0
+failures=1
+mean_us=0
+p50_us=0
+p95_us=0
+p99_us=0
+wall_clock_elapsed_s=2.002395
+success_throughput_req_s=0.0
+offered_throughput_req_s=0.5
+wall_clock_throughput_req_s=0.0
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=0
+failure_sample=seq=1 status=error:TimeoutError detail=timed out

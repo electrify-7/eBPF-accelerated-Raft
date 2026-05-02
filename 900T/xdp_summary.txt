@@ -1,0 +1,15 @@
+requests=900
+success=900
+failures=0
+mean_us=209.0
+p50_us=204
+p95_us=261
+p99_us=346
+wall_clock_elapsed_s=0.199953
+success_throughput_req_s=4501.1
+offered_throughput_req_s=4501.1
+wall_clock_throughput_req_s=4501.1
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=900
+completed 500/900

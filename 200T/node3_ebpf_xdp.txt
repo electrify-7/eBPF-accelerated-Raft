@@ -1,0 +1,82 @@
+sudo bpftool map dump name raft_stats 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 200
+    },{
+        "key": 1,
+        "value": 52
+    },{
+        "key": 2,
+        "value": 200
+    },{
+        "key": 3,
+        "value": 0
+    },{
+        "key": 4,
+        "value": 0
+    },{
+        "key": 5,
+        "value": 0
+    },{
+        "key": 6,
+        "value": 0
+    }
+]
+sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
+[{
+        "key": 124,
+        "value": {
+            "term": 1,
+            "payload_len": 40,
+            "_pad": 0,
+            "timestamp_ns": 77178447638675
+        }
+    },{
+        "key": 59,
+        "value": {
+            "term": 1,
+            "payload_len": 39,
+            "_pad": 0,
+            "timestamp_ns": 77178432559980
+        }
+    },{
+        "key": 64,
+        "value": {
+            "term": 1,
+            "payload_len": 39,
+            "_pad": 0,
+            "timestamp_ns": 77178433758305
+        }
+    },{
+        "key": 170,
+        "value": {
+            "term": 1,
+            "payload_len": 40,
+            "_pad": 0,
+            "timestamp_ns": 77178456629183
+        }
+    },{
+        "key": 152,
+        "value": {
+            "term": 1,
+            "payload_len": 40,
+            "_pad": 0,
+            "timestamp_ns": 77178453526839
+        }
+sudo bpftool map dump name raft_last_seen 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 77181887278439
+    }
+]
+sudo bpftool map dump name raft_qstats 2>/dev/null || true
+sudo bpftool map dump name raft_qslots 2>/dev/null | head -40 || true
+sudo bpftool map dump name raft_fanout 2>/dev/null || true
+sudo bpftool map dump name raft_tc_stats 2>/dev/null || true
+sudo bpftool map show | grep -E 'raft_|ringbuf' || true
+343: array  name raft_leader_ip  flags 0x0
+344: array  name raft_state  flags 0x0
+345: array  name raft_last_seen  flags 0x0
+346: hash  name raft_fast_log  flags 0x0
+347: ringbuf  name raft_events  flags 0x0
+348: array  name raft_stats  flags 0x0

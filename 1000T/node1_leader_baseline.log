@@ -1,0 +1,2 @@
+[leader node1] listening on 0.0.0.0:9000 followers=2 quorum=2 last_index=0 kernel_quorum=False kernel_broadcast=True
+[leader node1] committed=1000 commit_index=1000 retries=0 conflicts=0 quorum=userspace

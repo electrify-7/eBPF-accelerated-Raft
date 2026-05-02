@@ -1,0 +1,14 @@
+requests=300
+success=300
+failures=0
+mean_us=192.0
+p50_us=166
+p95_us=277
+p99_us=541
+wall_clock_elapsed_s=0.062213
+success_throughput_req_s=4822.2
+offered_throughput_req_s=4822.2
+wall_clock_throughput_req_s=4822.2
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=300

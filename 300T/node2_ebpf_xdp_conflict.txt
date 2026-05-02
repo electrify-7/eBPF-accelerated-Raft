@@ -1,0 +1,43 @@
+sudo bpftool map dump name raft_stats 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 0
+    },{
+        "key": 1,
+        "value": 0
+    },{
+        "key": 2,
+        "value": 0
+    },{
+        "key": 3,
+        "value": 0
+    },{
+        "key": 4,
+        "value": 0
+    },{
+        "key": 5,
+        "value": 64
+    },{
+        "key": 6,
+        "value": 0
+    }
+]
+sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
+[]
+sudo bpftool map dump name raft_last_seen 2>/dev/null || true
+[{
+        "key": 0,
+        "value": 0
+    }
+]
+sudo bpftool map dump name raft_qstats 2>/dev/null || true
+sudo bpftool map dump name raft_qslots 2>/dev/null | head -40 || true
+sudo bpftool map dump name raft_fanout 2>/dev/null || true
+sudo bpftool map dump name raft_tc_stats 2>/dev/null || true
+sudo bpftool map show | grep -E 'raft_|ringbuf' || true
+277: array  name raft_leader_ip  flags 0x0
+278: array  name raft_state  flags 0x0
+279: array  name raft_last_seen  flags 0x0
+280: hash  name raft_fast_log  flags 0x0
+281: ringbuf  name raft_events  flags 0x0
+282: array  name raft_stats  flags 0x0

@@ -1,2 +1,0 @@
-seq,status,latency_us,payload_bytes,leader_index,leader_retries,conflict_hints,quorum_source
-1,error:TimeoutError,2001148,38,0,0,0,userspace

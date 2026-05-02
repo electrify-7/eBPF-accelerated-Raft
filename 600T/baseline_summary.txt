@@ -1,0 +1,15 @@
+requests=600
+success=600
+failures=0
+mean_us=218.1
+p50_us=187
+p95_us=468
+p99_us=655
+wall_clock_elapsed_s=0.139375
+success_throughput_req_s=4304.9
+offered_throughput_req_s=4304.9
+wall_clock_throughput_req_s=4304.9
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=0
+completed 500/600

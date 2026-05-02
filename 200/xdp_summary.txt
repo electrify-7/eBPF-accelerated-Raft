@@ -1,0 +1,11 @@
+requests=200
+success=200
+failures=0
+mean_us=201.8
+p50_us=168
+p95_us=288
+p99_us=785
+wall_clock_throughput_req_s=4590.0
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=200

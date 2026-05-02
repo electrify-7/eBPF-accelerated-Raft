@@ -1,0 +1,16 @@
+requests=1000
+success=1000
+failures=0
+mean_us=224.6
+p50_us=213
+p95_us=303
+p99_us=567
+wall_clock_elapsed_s=0.235207
+success_throughput_req_s=4251.6
+offered_throughput_req_s=4251.6
+wall_clock_throughput_req_s=4251.6
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=0
+completed 500/1000
+completed 1000/1000

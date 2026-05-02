@@ -1,0 +1,2 @@
+[follower node2 id=2] listening on 0.0.0.0:9000 last_index=0 last_term=0
+[follower node2 id=2] committed=1000 commit_index=1000 last_index=1000 appends=1000 conflicts=0 heartbeats=21

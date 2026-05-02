@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @dataclass
 class ExperimentConfig:
-    requests: int = int(os.environ.get("N_REQUESTS", "500"))
+    requests: int = int(os.environ.get("N_REQUESTS", "1200"))
     payload_bytes: int = int(os.environ.get("PAYLOAD_BYTES", "64"))
     heartbeat_interval: float = float(os.environ.get("HEARTBEAT_INTERVAL", "0.1"))
     timeout: float = float(os.environ.get("RAFT_TIMEOUT", "2.0"))

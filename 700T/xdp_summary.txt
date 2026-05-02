@@ -1,0 +1,15 @@
+requests=700
+success=700
+failures=0
+mean_us=198.1
+p50_us=193
+p95_us=271
+p99_us=510
+wall_clock_elapsed_s=0.148518
+success_throughput_req_s=4713.2
+offered_throughput_req_s=4713.2
+wall_clock_throughput_req_s=4713.2
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=700
+completed 500/700

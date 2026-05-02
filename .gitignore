@@ -1,2 +1,7 @@
-100
+
 500MS
+__pycache__/
+*.py[cod]
+*.o
+results_*/
+.DS_Store

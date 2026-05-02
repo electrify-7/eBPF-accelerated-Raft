@@ -1,0 +1,15 @@
+metric,baseline,xdp
+count,1000,1000
+mean_us,224.6,198.4
+median_us,213.0,183.0
+p95_us,303,284
+p99_us,567,398
+success_throughput_req_s,4251.6,4727.1
+offered_throughput_req_s,4251.6,4727.1
+leader_retries,0,0
+conflict_hints,0,0
+kernel_quorum_replies,0,1000
+mean_latency_speedup,1.132,
+mean_latency_reduction_pct,11.7,
+success_throughput_speedup,1.112,
+success_throughput_gain_pct,11.2,

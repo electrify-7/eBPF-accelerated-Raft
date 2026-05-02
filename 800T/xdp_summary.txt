@@ -1,0 +1,15 @@
+requests=800
+success=800
+failures=0
+mean_us=201.4
+p50_us=196
+p95_us=256
+p99_us=465
+wall_clock_elapsed_s=0.171641
+success_throughput_req_s=4660.9
+offered_throughput_req_s=4660.9
+wall_clock_throughput_req_s=4660.9
+leader_retries=0
+conflict_hints=0
+kernel_quorum_replies=800
+completed 500/800
