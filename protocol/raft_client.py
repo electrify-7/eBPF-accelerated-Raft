@@ -127,7 +127,8 @@ def main() -> None:
             fh.write(csv_header())
             fh.writelines(rows)
 
-    throughput = len(latencies) / wall_elapsed if wall_elapsed else 0.0
+    success_throughput = len(latencies) / wall_elapsed if wall_elapsed else 0.0
+    offered_throughput = args.count / wall_elapsed if wall_elapsed else 0.0
     print(f"requests={args.count}")
     print(f"success={len(latencies)}")
     print(f"failures={failures}")
@@ -135,7 +136,10 @@ def main() -> None:
     print(f"p50_us={percentile(latencies, 50)}")
     print(f"p95_us={percentile(latencies, 95)}")
     print(f"p99_us={percentile(latencies, 99)}")
-    print(f"wall_clock_throughput_req_s={throughput:.1f}")
+    print(f"wall_clock_elapsed_s={wall_elapsed:.6f}")
+    print(f"success_throughput_req_s={success_throughput:.1f}")
+    print(f"offered_throughput_req_s={offered_throughput:.1f}")
+    print(f"wall_clock_throughput_req_s={success_throughput:.1f}")
     print(f"leader_retries={total_retries}")
     print(f"conflict_hints={total_conflicts}")
     print(f"kernel_quorum_replies={kernel_quorum}")
