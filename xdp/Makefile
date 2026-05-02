@@ -59,6 +59,7 @@ reload: unload load
 stats:
 	@if [ -n "$(IFACE)" ]; then sudo tc filter show dev $(IFACE) egress 2>/dev/null || true; fi
 	sudo bpftool map dump name raft_stats 2>/dev/null || true
+	sudo bpftool map dump name raft_state 2>/dev/null || true
 	sudo bpftool map dump name raft_fast_log 2>/dev/null | head -40 || true
 	sudo bpftool map dump name raft_last_seen 2>/dev/null || true
 	sudo bpftool map dump name raft_qstats 2>/dev/null || true

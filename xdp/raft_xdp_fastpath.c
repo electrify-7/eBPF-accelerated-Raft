@@ -152,7 +152,13 @@ static __always_inline int prev_matches(struct raft_state_value *state,
 {
     if (prev_index == 0 && prev_term == 0)
         return 1;
-    return prev_index == state->last_index && prev_term == state->last_term;
+    if (prev_index > state->last_index)
+        return 0;
+    if (prev_index == state->last_index)
+        return prev_term == state->last_term;
+
+    struct fast_log_entry *entry = bpf_map_lookup_elem(&raft_fast_log, &prev_index);
+    return entry && prev_term == entry->term;
 }
 
 SEC("xdp")

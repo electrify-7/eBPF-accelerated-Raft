@@ -171,12 +171,10 @@ class BpfLogDrainer:
             return
         candidates: List[Tuple[int, int]] = []
         for row in rows:
-            key = self._bytes(row.get("key", []))
-            value = self._bytes(row.get("value", []))
-            if len(key) < 4 or len(value) < 4:
+            index = self._map_u32(row.get("key"))
+            term = self._fast_log_term(row.get("value"))
+            if index is None or term is None:
                 continue
-            index = int.from_bytes(key[:4], "little")
-            term = int.from_bytes(value[:4], "little")
             if index <= 0 or index in self.seen:
                 continue
             candidates.append((index, term))
@@ -191,6 +189,10 @@ class BpfLogDrainer:
 
     @staticmethod
     def _bytes(items) -> bytes:
+        if isinstance(items, int):
+            return items.to_bytes(4, "little")
+        if isinstance(items, dict):
+            return b""
         out = bytearray()
         for item in items:
             if isinstance(item, str):
@@ -198,6 +200,22 @@ class BpfLogDrainer:
             else:
                 out.append(int(item))
         return bytes(out)
+
+    @classmethod
+    def _map_u32(cls, raw) -> Optional[int]:
+        if isinstance(raw, int):
+            return raw
+        data = cls._bytes(raw or [])
+        if len(data) < 4:
+            return None
+        return int.from_bytes(data[:4], "little")
+
+    @classmethod
+    def _fast_log_term(cls, raw) -> Optional[int]:
+        if isinstance(raw, dict):
+            term = raw.get("term")
+            return int(term) if term is not None else None
+        return cls._map_u32(raw)
 
 
 class RaftFollower:
@@ -467,7 +485,8 @@ class RaftLeader:
     def send_broadcast_append(self, heartbeat: bool = False) -> None:
         if not self.followers:
             return
-        frame = self.build_append_frame(self.followers[0], heartbeat=heartbeat, broadcast=True)
+        follower = min(self.followers, key=lambda item: self.next_index.get(item, 1))
+        frame = self.build_append_frame(follower, heartbeat=heartbeat, broadcast=True)
         if frame:
             self.sock.sendto(frame, self.followers[0])
 
@@ -527,11 +546,11 @@ class RaftLeader:
                 if addr in self.match_index:
                     self.match_index[addr] = max(self.match_index.get(addr, 0), matched)
                     self.next_index[addr] = max(self.next_index.get(addr, 1), matched + 1)
+                if matched < target_index:
+                    continue
+                if addr in self.match_index:
                     accepted.add(addr[0])
                 if msg.quorum_reached:
-                    for follower in self.followers:
-                        self.match_index[follower] = max(self.match_index[follower], matched)
-                        self.next_index[follower] = max(self.next_index[follower], matched + 1)
                     self.last_quorum_source = "ebpf"
                     break
             else:
